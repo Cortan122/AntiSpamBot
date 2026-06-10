@@ -2,7 +2,7 @@ import os
 import logging
 import asyncio
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, MessageReactionHandler
 from config import TELEGRAM_TOKEN, COMMAND_AUTO_DELETE_SECONDS, SPAM_FLAG_EMOJI
 from db import (
     init_db, add_spam_pattern, get_spam_patterns, get_user_message_count,
@@ -158,6 +158,64 @@ async def unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
     asyncio.create_task(delete_message_later(context.bot, group_id, update.message.message_id))
 
 
+async def handle_message_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle message reactions - block user if admin reacts with 👎 to flagged message."""
+    if not update.message_reaction.chat.type in ['group', 'supergroup']:
+        return
+
+    group_id = update.message_reaction.chat.id
+    user_id = update.message_reaction.user.id
+    message_id = update.message_reaction.message_id
+
+    # Check if admin added thumbs down reaction
+    if not await is_admin(context, group_id, user_id):
+        return
+
+    new_reactions = update.message_reaction.new_reaction
+    if not new_reactions or not any(r.emoji == SPAM_FLAG_EMOJI for r in new_reactions):
+        return
+
+    try:
+        # Get the original message to find the user who posted it
+        message = await context.bot.get_message(group_id, message_id)
+        if not message or not message.from_user:
+            return
+
+        target_user_id = message.from_user.id
+
+        # Delete all messages from this user in the group
+        try:
+            # Note: We can't directly delete multiple messages, so we delete the flagged message
+            await context.bot.delete_message(group_id, message_id)
+        except Exception as e:
+            logger.warning(f"Could not delete message {message_id}: {e}")
+
+        # Block the user
+        block_user(group_id, target_user_id)
+
+        # Report to admins
+        report_text = (
+            f"🚨 User blocked by admin emoji reaction!\n"
+            f"User: {message.from_user.mention_html()}\n"
+            f"User ID: {target_user_id}\n"
+            f"Reason: Admin flagged message with 👎"
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=group_id,
+                text=report_text,
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            logger.error(f"Could not send admin report: {e}")
+
+        log_admin_action(group_id, 'admin_blocked_user', f"User {target_user_id}, Admin {user_id}")
+        logger.info(f"Blocked user {target_user_id} in group {group_id} via admin emoji reaction")
+
+    except Exception as e:
+        logger.error(f"Error handling message reaction: {e}")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular messages - check for spam."""
     if not update.message.chat.type in ['group', 'supergroup']:
@@ -256,6 +314,7 @@ def main():
     application.add_handler(CommandHandler("spamlist", spamlist))
     application.add_handler(CommandHandler("clearspam", clearspam))
     application.add_handler(CommandHandler("unblock", unblock))
+    application.add_handler(MessageReactionHandler(handle_message_reaction))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Start the bot
