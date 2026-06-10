@@ -1,0 +1,14 @@
+[Unit]
+Description=Telegram bot
+After=network.target
+
+[Service]
+Type=simple
+User=placeholder_user
+Group=placeholder_user
+ExecStart=placeholder_dir/run.sh
+RestartSec=60
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
