@@ -38,6 +38,15 @@ def init_db():
         )
     ''')
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS flagged_messages (
+            message_id INTEGER NOT NULL,
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            PRIMARY KEY (message_id, group_id)
+        )
+    ''')
+
     conn.commit()
     conn.close()
 
@@ -177,3 +186,33 @@ def clear_spam_pattern(pattern_id):
 
     conn.commit()
     conn.close()
+
+
+def store_flagged_message(message_id, group_id, user_id):
+    """Store a flagged message for admin reaction tracking."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        INSERT OR IGNORE INTO flagged_messages (message_id, group_id, user_id)
+        VALUES (?, ?, ?)
+    ''', (message_id, group_id, user_id))
+
+    conn.commit()
+    conn.close()
+
+
+def get_flagged_message_user(message_id, group_id):
+    """Get the user ID of a flagged message."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT user_id FROM flagged_messages
+        WHERE message_id = ? AND group_id = ?
+    ''', (message_id, group_id))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result[0] if result else None

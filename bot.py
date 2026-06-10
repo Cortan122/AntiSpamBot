@@ -7,7 +7,7 @@ from config import TELEGRAM_TOKEN, COMMAND_AUTO_DELETE_SECONDS, SPAM_FLAG_EMOJI
 from db import (
     init_db, add_spam_pattern, get_spam_patterns, get_user_message_count,
     increment_user_message_count, log_admin_action, is_user_blocked, block_user,
-    unblock_user, clear_spam_pattern
+    unblock_user, clear_spam_pattern, store_flagged_message, get_flagged_message_user
 )
 from similarity import find_similar_spam
 
@@ -160,43 +160,55 @@ async def unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle message reactions - block user if admin reacts with 👎 to flagged message."""
+    logger.info(f"Message reaction event received: {update.message_reaction}")
+
     if not update.message_reaction.chat.type in ['group', 'supergroup']:
+        logger.debug("Reaction not in group/supergroup")
         return
 
     group_id = update.message_reaction.chat.id
     user_id = update.message_reaction.user.id
     message_id = update.message_reaction.message_id
 
+    logger.info(f"Reaction from user {user_id} in group {group_id} on message {message_id}")
+
     # Check if admin added thumbs down reaction
     if not await is_admin(context, group_id, user_id):
+        logger.debug(f"User {user_id} is not an admin")
         return
 
     new_reactions = update.message_reaction.new_reaction
+    logger.info(f"New reactions: {new_reactions}")
+
     if not new_reactions or not any(r.emoji == SPAM_FLAG_EMOJI for r in new_reactions):
+        logger.debug(f"No thumbs down reaction found")
         return
 
+    logger.info(f"Admin {user_id} added thumbs down reaction, blocking user")
+
     try:
-        # Get the original message to find the user who posted it
-        message = await context.bot.get_message(group_id, message_id)
-        if not message or not message.from_user:
+        # Get the user who sent the flagged message
+        target_user_id = get_flagged_message_user(message_id, group_id)
+        if not target_user_id:
+            logger.warning(f"Could not find original sender of message {message_id}")
             return
 
-        target_user_id = message.from_user.id
+        logger.info(f"Found target user: {target_user_id}")
 
-        # Delete all messages from this user in the group
+        # Delete the flagged message
         try:
-            # Note: We can't directly delete multiple messages, so we delete the flagged message
             await context.bot.delete_message(group_id, message_id)
+            logger.info(f"Deleted message {message_id}")
         except Exception as e:
             logger.warning(f"Could not delete message {message_id}: {e}")
 
         # Block the user
         block_user(group_id, target_user_id)
+        logger.info(f"Blocked user {target_user_id}")
 
         # Report to admins
         report_text = (
             f"🚨 User blocked by admin emoji reaction!\n"
-            f"User: {message.from_user.mention_html()}\n"
             f"User ID: {target_user_id}\n"
             f"Reason: Admin flagged message with 👎"
         )
@@ -206,6 +218,7 @@ async def handle_message_reaction(update: Update, context: ContextTypes.DEFAULT_
                 text=report_text,
                 parse_mode='HTML'
             )
+            logger.info(f"Sent block report to group {group_id}")
         except Exception as e:
             logger.error(f"Could not send admin report: {e}")
 
@@ -213,7 +226,7 @@ async def handle_message_reaction(update: Update, context: ContextTypes.DEFAULT_
         logger.info(f"Blocked user {target_user_id} in group {group_id} via admin emoji reaction")
 
     except Exception as e:
-        logger.error(f"Error handling message reaction: {e}")
+        logger.error(f"Error handling message reaction: {e}", exc_info=True)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -253,7 +266,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await context.bot.delete_message(group_id, update.message.message_id)
                     except Exception as e:
-                        logger.warning(f"Could not delete user's first spam message: {e}")
+                        logger.warning(f"Could not delete user's spam message: {e}")
 
                     # Block user
                     block_user(group_id, user_id)
@@ -284,6 +297,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             message_id=update.message.message_id,
                             reaction=SPAM_FLAG_EMOJI
                         )
+                        # Store this flagged message for admin reaction handling
+                        store_flagged_message(update.message.message_id, group_id, user_id)
                     except Exception as e:
                         logger.warning(f"Could not set reaction: {e}")
 
@@ -314,12 +329,19 @@ def main():
     application.add_handler(CommandHandler("spamlist", spamlist))
     application.add_handler(CommandHandler("clearspam", clearspam))
     application.add_handler(CommandHandler("unblock", unblock))
-    application.add_handler(MessageReactionHandler(handle_message_reaction))
+
+    # Try to add MessageReactionHandler if available
+    try:
+        application.add_handler(MessageReactionHandler(handle_message_reaction))
+        logger.info("MessageReactionHandler registered successfully")
+    except Exception as e:
+        logger.warning(f"Could not register MessageReactionHandler: {e}")
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Start the bot
     print("Bot is starting...")
-    application.run_polling()
+    application.run_polling(allowed_updates=['message', 'message_reaction'])
 
 
 if __name__ == '__main__':
