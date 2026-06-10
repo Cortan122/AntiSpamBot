@@ -210,11 +210,3 @@ To add new functionality:
 2. Add command handler to `bot.py`
 3. Register handler in `main()` function
 4. Add tests in group chat
-
-## License
-
-See LICENSE file in repository.
-
-## Support
-
-For issues or feature requests, open an issue on GitHub: https://github.com/G3rkul3s/AntiSpamBot/issues
