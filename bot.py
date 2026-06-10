@@ -156,6 +156,9 @@ async def unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Delete the command message after COMMAND_AUTO_DELETE_SECONDS
     asyncio.create_task(delete_message_later(context.bot, group_id, update.message.message_id))
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular messages - check for spam."""
     if not update.message.chat.type in ['group', 'supergroup']:
         return
