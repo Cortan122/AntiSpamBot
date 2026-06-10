@@ -7,7 +7,7 @@ from config import TELEGRAM_TOKEN, COMMAND_AUTO_DELETE_SECONDS, SPAM_FLAG_EMOJI
 from db import (
     init_db, add_spam_pattern, get_spam_patterns, get_user_message_count,
     increment_user_message_count, log_admin_action, is_user_blocked, block_user,
-    clear_spam_pattern
+    unblock_user, clear_spam_pattern
 )
 from similarity import find_similar_spam
 
@@ -131,7 +131,31 @@ async def clearspam(update: Update, context: ContextTypes.DEFAULT_TYPE):
     asyncio.create_task(delete_message_later(context.bot, group_id, update.message.message_id))
 
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def unblock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /unblock command - unblock a user (admin only)."""
+    if not update.message.chat.type in ['group', 'supergroup']:
+        return
+
+    group_id = update.message.chat_id
+    user_id = update.message.from_user.id
+
+    # Check admin permissions
+    if not await is_admin(context, group_id, user_id):
+        return
+
+    if not context.args:
+        return
+
+    try:
+        target_user_id = int(context.args[0])
+        unblock_user(group_id, target_user_id)
+        log_admin_action(group_id, 'unblock_user', f"User ID: {target_user_id}")
+        logger.info(f"Unblocked user {target_user_id} in group {group_id}")
+    except (ValueError, Exception) as e:
+        logger.error(f"Error unblocking user: {e}")
+
+    # Delete the command message after COMMAND_AUTO_DELETE_SECONDS
+    asyncio.create_task(delete_message_later(context.bot, group_id, update.message.message_id))
     """Handle regular messages - check for spam."""
     if not update.message.chat.type in ['group', 'supergroup']:
         return
@@ -175,10 +199,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Report to admins
                     report_text = (
-                        f"🚨 First spam message detected and blocked!\n"
+                        f"🚨 Spam message detected and blocked!\n"
                         f"User: {update.message.from_user.mention_html()}\n"
                         f"User ID: {user_id}\n"
-                        f"Similarity: {similarity:.2%}"
+                        # f"Similarity: {similarity:.2%}"
                     )
                     try:
                         await context.bot.send_message(
@@ -228,6 +252,7 @@ def main():
     application.add_handler(CommandHandler("addspam", addspam))
     application.add_handler(CommandHandler("spamlist", spamlist))
     application.add_handler(CommandHandler("clearspam", clearspam))
+    application.add_handler(CommandHandler("unblock", unblock))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # Start the bot

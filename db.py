@@ -154,6 +154,20 @@ def block_user(group_id, user_id):
     conn.close()
 
 
+def unblock_user(group_id, user_id):
+    """Unblock a user in a group."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        UPDATE user_messages SET blocked = 0
+        WHERE group_id = ? AND user_id = ?
+    ''', (group_id, user_id))
+
+    conn.commit()
+    conn.close()
+
+
 def clear_spam_pattern(pattern_id):
     """Remove a spam pattern from the database."""
     conn = sqlite3.connect(DATABASE_PATH)

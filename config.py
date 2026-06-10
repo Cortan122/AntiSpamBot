@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Telegram Bot Configuration
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
