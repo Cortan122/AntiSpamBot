@@ -1,39 +1,36 @@
 # AntiSpamBot
 
-A Telegram bot for detecting and managing spam messages in group chats using semantic similarity analysis.
+A Telegram bot for detecting and managing spam messages in group chats using string similarity analysis.
 
 ## Features
 
-- **Admin Controls**: Add spam patterns to a group-specific database
-- **Semantic Similarity Detection**: Uses embeddings (sentence-transformers) to detect similar messages (~77% threshold)
-- **User Trustworthiness Tracking**: Tracks message count per user per group
-- **First-Offender Enforcement**: Deletes spam, blocks users, and reports to admins
-- **Repeat Offender Flagging**: Marks repeat spam with 👎 emoji
-- **Auto-Cleanup**: Admin commands auto-delete after 60 seconds to keep chats clean
+- **Smart Spam Detection**: Uses string similarity to detect spam patterns (77% threshold)
+- **Admin Controls**: Add, view, and manage spam patterns per group
+- **User Blocking**: Automatically block repeat spammers and first-time violators
+- **Admin Reactions**: React with 👎 to flagged messages to manually block users
+- **Trustworthiness Tracking**: Message count per user shows engagement level
+- **Auto-Cleanup**: Admin commands auto-delete after 60 seconds
+- **Multi-Group Support**: Separate spam databases per group
 
-## Setup
+## Quick Start
 
-### Requirements
+### Prerequisites
 - Python 3.8+
-- Telegram bot token (get from [@BotFather](https://t.me/botfather))
+- Telegram bot token from [@BotFather](https://t.me/botfather)
 
 ### Installation
 
-1. Clone the repository:
 ```bash
+# Clone the repository
 git clone https://github.com/G3rkul3s/AntiSpamBot.git
 cd AntiSpamBot
-```
 
-2. Create `.env` file with your bot token:
-```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
 cp .env.example .env
 # Edit .env and add your TELEGRAM_TOKEN
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
 ```
 
 ### Running the Bot
@@ -44,73 +41,180 @@ python bot.py
 
 ## Commands
 
-All commands are admin-only (ignored silently if used by non-admins).
+All commands are **admin-only** (non-admins: silently ignored).
+
+### `/help`
+Show help message with all available commands.
 
 ### `/addspam <message>`
 Add a spam pattern to the group's database.
 
-**Example**: `/addspam Buy cheap products now!`
+**Examples:**
+```
+/addspam Buy cheap products now!
+/addspam Click here for free money
+```
 
-**Reply usage**: Reply to any message with `/addspam` to add that message as a pattern.
+**Reply Usage:**
+Reply to any message with `/addspam` to add that message as a pattern:
+```
+[Admin replies to spam message with: /addspam]
+```
 
 ### `/spamlist`
-Show all spam patterns currently in the group's database.
+Show all spam patterns currently in the group's database with their IDs.
 
-### `/clearspam <pattern_id>`
-Remove a spam pattern by its ID (from `/spamlist` output).
+Output example:
+```
+Spam patterns in this group:
+1. Buy cheap products now!
+2. Click here for free money
+3. Get rich quick scheme
+```
+
+### `/clearspam <id>`
+Remove a spam pattern by its ID (shown in `/spamlist`).
+
+**Example:** `/clearspam 2` removes pattern ID 2
+
+### `/unblock <user_id>`
+Unblock a previously blocked user so they can post messages again.
+
+**Example:** `/unblock 123456789`
+
+### `/start`
+Show welcome message.
 
 ## How It Works
 
-1. **Admin adds spam patterns**: Use `/addspam` to teach the bot what spam looks like
-2. **Bot analyzes messages**: When users post, the bot computes a semantic embedding and compares it to stored patterns
-3. **First-time spam**: If similarity > 77%, delete message, block user, and report to admins
-4. **Repeat spam**: If a blocked user tries spam again, flag with 👎 emoji
-5. **Message tracking**: All non-spam messages increment the user's message count (trustworthiness metric)
+### Spam Detection Process
 
-## Database
+1. **Admin Adds Pattern**: Use `/addspam` to teach the bot what spam looks like
+2. **Message Check**: When users post, the bot analyzes the message
+3. **Similarity Match**: Compares new messages to stored patterns
+4. **Action Taken**:
+   - **First-time spam** (new user): Delete message, block user, notify admins
+   - **Repeat spam** (known user): Flag with 👎 emoji
 
-The bot uses SQLite (`spam_db.sqlite`) with three tables:
-- `spam_patterns`: Stores spam templates and their embeddings per group
-- `user_messages`: Tracks message count and block status per user per group
-- `admin_logs`: Logs all admin actions (add/clear spam, block/flag users)
+### User Trustworthiness
+
+The bot tracks message count per user per group:
+- **Count = 0**: New user (first message is spam = permanent block)
+- **Count > 0**: Established user (spam = flagged with 👎)
+- Admins can use `/unblock` to restore flagged users
+
+### Admin Emoji Reactions
+
+When the bot flags spam with 👎:
+1. Admin can react to that flagged message with 👎
+2. Bot detects admin's reaction
+3. User is immediately blocked and reported
+4. Flagged message is deleted
 
 ## Configuration
 
-Edit `config.py` to adjust:
-- `SIMILARITY_THRESHOLD`: Similarity score threshold (default: 0.77 = 77%)
-- `EMBEDDING_MODEL`: Sentence transformer model (default: `all-MiniLM-L6-v2`)
-- `COMMAND_AUTO_DELETE_SECONDS`: How long before admin commands auto-delete (default: 60)
+Edit `config.py` to customize:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `SIMILARITY_THRESHOLD` | 0.77 | Spam detection sensitivity (0.0-1.0) |
+| `COMMAND_AUTO_DELETE_SECONDS` | 60 | How long before admin commands auto-delete |
+| `SPAM_FLAG_EMOJI` | 👎 | Emoji used to flag repeat spam |
+
+## Database
+
+SQLite database (`spam_db.sqlite`) contains three tables:
+
+| Table | Purpose |
+|-------|---------|
+| `spam_patterns` | Spam templates per group |
+| `user_messages` | Message count and block status per user per group |
+| `admin_logs` | Log of all admin actions |
+| `flagged_messages` | Track which user sent each flagged message |
 
 ## Permissions Required
 
-The bot needs the following permissions in groups:
-- Delete messages
-- Send messages
-- Set message reactions
+The bot needs these permissions in groups:
+- ✅ Send messages
+- ✅ Delete messages
+- ✅ Read message history
+- ✅ Set message reactions (for flagging)
+
+## Example Workflow
+
+```
+1. Admin in group: /addspam "Buy cheap crypto!"
+   → Bot stores pattern and deletes command
+
+2. User sends: "Buy cheap crypto now!"
+   → Bot detects match (90% similarity)
+   → First time? Block user and report
+   → Repeat spammer? Flag with 👎
+
+3. Admin sees 👎 on message
+   → Admin reacts with 👎
+   → Bot blocks that user and deletes message
+
+4. To unblock: /unblock <user_id>
+   → User can post again
+```
+
+## Similarity Threshold
+
+The default **77% threshold** catches:
+- ✅ Exact matches: "Buy cheap crypto!"
+- ✅ Typos: "Bey cheap crypto!" (96%)
+- ✅ Different case: "BUY CHEAP CRYPTO!" (100%)
+- ❌ Different message: "Buy something else" (30%)
+
+Adjust `SIMILARITY_THRESHOLD` in `config.py` to be more/less strict.
 
 ## Troubleshooting
 
-**Bot doesn't delete spam messages**: 
-- Check that the bot has "Delete Messages" permission in the group
+### Bot doesn't delete messages
+- Check bot has "Delete Messages" permission in group settings
+- Verify bot is group admin
 
-**Reactions not showing**:
-- Some Telegram clients may not display message reactions immediately
+### Reactions not showing
+- Some Telegram clients cache reactions
+- Try refreshing the message
+- Ensure bot has "Set Message Reactions" permission
 
-**Database grows large**:
-- Consider archiving old `admin_logs` entries periodically (not implemented yet)
+### No spam detection happening
+- Verify spam patterns are added: `/spamlist`
+- Check similarity threshold isn't too high
+- Ensure messages are long enough (very short messages get high match rates)
+
+### Database errors
+- Delete `spam_db.sqlite` to reset (will lose all data)
+- Bot recreates database automatically on next run
 
 ## Development
 
-Project structure:
+### Project Structure
 ```
-├── bot.py           - Main bot with message handlers
-├── db.py            - SQLite database layer
-├── similarity.py    - Semantic similarity engine
-├── config.py        - Configuration constants
-├── requirements.txt - Python dependencies
-└── spam_db.sqlite   - SQLite database (created at runtime)
+AntiSpamBot/
+├── bot.py              (Main bot with handlers)
+├── db.py               (SQLite database layer)
+├── similarity.py       (String similarity engine)
+├── config.py           (Configuration constants)
+├── requirements.txt    (Python dependencies)
+├── .env.example        (Environment template)
+├── README.md           (This file)
+└── spam_db.sqlite      (SQLite database - created at runtime)
 ```
+
+### Adding Features
+To add new functionality:
+1. Add database functions to `db.py`
+2. Add command handler to `bot.py`
+3. Register handler in `main()` function
+4. Add tests in group chat
 
 ## License
 
 See LICENSE file in repository.
+
+## Support
+
+For issues or feature requests, open an issue on GitHub: https://github.com/G3rkul3s/AntiSpamBot/issues

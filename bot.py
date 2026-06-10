@@ -36,7 +36,38 @@ async def is_admin(context: ContextTypes.DEFAULT_TYPE, group_id: int, user_id: i
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
-    await update.message.reply_text("Hi! I am an anti-spam bot. Use /addspam to add spam patterns (admin only).")
+    await update.message.reply_text("Hi! I am an anti-spam bot. Use /help to see available commands.")
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /help command - show available commands."""
+    help_text = """
+🤖 **AntiSpamBot - Help**
+
+**Admin Commands:**
+• `/addspam <message>` - Add a spam pattern. Reply to a message to add it as pattern.
+• `/spamlist` - Show all spam patterns in this group.
+• `/clearspam <id>` - Remove a spam pattern by ID.
+• `/unblock <user_id>` - Unblock a previously blocked user.
+
+**Spam Detection:**
+• Messages similar (77%+) to spam patterns are automatically flagged.
+• First-time spammers: message deleted, user blocked, admins notified.
+• Repeat spammers: message flagged with 👎 emoji.
+
+**Admin Emoji Reaction:**
+• React with 👎 to a flagged message to block that user immediately.
+
+**Other:**
+• `/start` - Show welcome message.
+• `/help` - Show this help message.
+
+**Notes:**
+• All commands are admin-only (silently ignored if used by others).
+• Admin commands auto-delete after 60 seconds.
+• Bot needs delete message permission to work properly.
+"""
+    await update.message.reply_text(help_text, parse_mode='Markdown')
 
 
 async def addspam(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -325,6 +356,7 @@ def main():
 
     # Register handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("addspam", addspam))
     application.add_handler(CommandHandler("spamlist", spamlist))
     application.add_handler(CommandHandler("clearspam", clearspam))
