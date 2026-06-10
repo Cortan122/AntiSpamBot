@@ -9,7 +9,7 @@ from db import (
     increment_user_message_count, log_admin_action, is_user_blocked, block_user,
     clear_spam_pattern
 )
-from similarity import get_embedding, find_similar_spam
+from similarity import find_similar_spam
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,8 +64,7 @@ async def addspam(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        embedding = get_embedding(spam_text)
-        add_spam_pattern(group_id, spam_text, embedding)
+        add_spam_pattern(group_id, spam_text)
         log_admin_action(group_id, 'add_spam', spam_text)
         logger.info(f"Added spam pattern to group {group_id}: {spam_text[:50]}")
     except Exception as e:
@@ -159,8 +158,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Check for spam
         spam_patterns = get_spam_patterns(group_id)
         if spam_patterns:
-            message_embedding = get_embedding(message_text)
-            match = find_similar_spam(message_embedding, spam_patterns)
+            match = find_similar_spam(message_text, spam_patterns)
 
             if match:
                 pattern_id, pattern_text, similarity = match

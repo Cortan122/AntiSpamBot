@@ -1,30 +1,19 @@
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from config import EMBEDDING_MODEL, SIMILARITY_THRESHOLD
-
-# Load the model once at startup
-model = SentenceTransformer(EMBEDDING_MODEL)
+from difflib import SequenceMatcher
+from config import SIMILARITY_THRESHOLD
 
 
 def get_embedding(text):
-    """Compute embedding for a message."""
-    return model.encode(text, convert_to_numpy=True)
+    """Return text as-is (no embedding needed for simple matching)."""
+    return text.lower()
 
 
-def compute_similarity(embedding1, embedding2):
-    """Compute cosine similarity between two embeddings."""
-    # Cosine similarity
-    dot_product = np.dot(embedding1, embedding2)
-    norm1 = np.linalg.norm(embedding1)
-    norm2 = np.linalg.norm(embedding2)
-
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-
-    return dot_product / (norm1 * norm2)
+def compute_similarity(text1, text2):
+    """Compute similarity using SequenceMatcher (0.0 to 1.0)."""
+    matcher = SequenceMatcher(None, text1, text2)
+    return matcher.ratio()
 
 
-def find_similar_spam(message_embedding, spam_patterns, threshold=SIMILARITY_THRESHOLD):
+def find_similar_spam(message_text, spam_patterns, threshold=SIMILARITY_THRESHOLD):
     """Find similar spam patterns to a message.
 
     Returns (pattern_id, text, similarity_score) or None.
@@ -32,8 +21,8 @@ def find_similar_spam(message_embedding, spam_patterns, threshold=SIMILARITY_THR
     best_match = None
     best_similarity = threshold
 
-    for pattern_id, text, pattern_embedding in spam_patterns:
-        similarity = compute_similarity(message_embedding, pattern_embedding)
+    for pattern_id, text, _ in spam_patterns:
+        similarity = compute_similarity(message_text.lower(), text.lower())
 
         if similarity > best_similarity:
             best_similarity = similarity
