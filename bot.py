@@ -53,7 +53,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 **Spam Detection:**
 • Messages similar (77%+) to spam patterns are automatically flagged.
 • First-time spammers: message deleted, user blocked, admins notified.
-• Repeat spammers: message flagged with 👎 emoji.
+• Other users: message flagged with 👎 emoji.
 
 **Admin Emoji Reaction:**
 • React with 👎 to a flagged message to block that user immediately.
@@ -63,7 +63,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • `/help` - Show this help message.
 
 **Notes:**
-• All commands are admin-only (silently ignored if used by others).
+• All commands are admin-only.
 • Admin commands auto-delete after 60 seconds.
 • Bot needs delete message permission to work properly.
 """
@@ -239,9 +239,8 @@ async def handle_message_reaction(update: Update, context: ContextTypes.DEFAULT_
 
         # Report to admins
         report_text = (
-            f"🚨 User blocked by admin emoji reaction!\n"
-            f"User ID: {target_user_id}\n"
-            f"Reason: Admin flagged message with 👎"
+            f"🚨 Spam message confirmed and blocked!\n"
+            f"User: <a href='tg://user?id={target_user_id}'> {target_user_id}</a>\n"
         )
         try:
             await context.bot.send_message(
@@ -304,9 +303,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                     # Report to admins
                     report_text = (
-                        f"🚨 Spam message detected and blocked!\n"
-                        f"User: {update.message.from_user.mention_html()}\n"
-                        f"User ID: {user_id}\n"
+                        f"🚨 First spam message detected and blocked!\n"
+                        f"User: <a href='tg://user?id={user_id}'> {user_id}</a>\n"
                         # f"Similarity: {similarity:.2%}"
                     )
                     try:
